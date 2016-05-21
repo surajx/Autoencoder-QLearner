@@ -9,16 +9,20 @@
 # March and April 2016
 
 """ Student Details
-    Student Name:
-    Student number:
-    Date:
+    Student Name: Suraj Narayanan S
+    Student number: 5881495
+    Date: 21/05/2015
 """
 
 from game import *
 from learningAgents import ReinforcementAgent
 from featureExtractors import *
 
-import random,util,math
+import random
+import util
+
+import numpy as np
+
 
 class QLearningAgent(ReinforcementAgent):
     """
@@ -41,11 +45,20 @@ class QLearningAgent(ReinforcementAgent):
           which returns legal actions
           for a state
     """
-    def __init__(self, **args):
+
+    def __init__(self, encoder=None, **args):
         "You can initialize Q-values here..."
         ReinforcementAgent.__init__(self, **args)
 
-        "*** YOUR CODE HERE ***"
+        # Trained Autoencoder to extract non-linear features
+        # from pacman state-space.
+        if encoder:
+            self.encoder = encoder['encoder']
+            self.enc_type = encoder['enc_type']
+        else:
+            self.encoder = None
+
+        self.q_values = util.Counter()
 
     def getQValue(self, state, action):
         """
@@ -53,9 +66,16 @@ class QLearningAgent(ReinforcementAgent):
           Should return 0.0 if we never seen
           a state or (state,action) tuple
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
 
+        # Encoding the original state to map to the relevant features
+        # found by the autoencoder.
+        if self.encoder:
+            state = self.enc_type.predict(self.encoder, state)
+
+        # Vanilla Q-learning
+        if (state, action) not in self.q_values:
+            self.q_values[(state, action)] = 0
+        return self.q_values[(state, action)]
 
     def getValue(self, state):
         """
@@ -64,8 +84,17 @@ class QLearningAgent(ReinforcementAgent):
           there are no legal actions, which is the case at the
           terminal state, you should return a value of 0.0.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Vanilla Q-learning
+        actions = self.getLegalActions(state)
+        if not actions:
+            return 0
+        max_val = float("-inf")
+        for action in actions:
+            q_val = self.getQValue(state, action)
+            if self.getQValue(state, action) > max_val:
+                max_val = q_val
+        return max_val
 
     def getPolicy(self, state):
         """
@@ -73,8 +102,21 @@ class QLearningAgent(ReinforcementAgent):
           are no legal actions, which is the case at the terminal state,
           you should return None.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Vanilla Q-learning
+        actions = self.getLegalActions(state)
+        if not actions:
+            return None
+        max_actions = []
+        for action in actions:
+            if not max_actions:
+                max_actions.append((action, self.getQValue(state, action)))
+                continue
+            if self.getQValue(state, action) > max_actions[0][1]:
+                max_actions = [(action, self.getQValue(state, action))]
+            elif self.getQValue(state, action) == max_actions[0][1]:
+                max_actions.append((action, self.getQValue(state, action)))
+        return random.choice(max_actions)[0]
 
     def getAction(self, state):
         """
@@ -87,13 +129,15 @@ class QLearningAgent(ReinforcementAgent):
           HINT: You might want to use util.flipCoin(prob)
           HINT: To pick randomly from a list, use random.choice(list)
         """
-        # Pick Action
-        legalActions = self.getLegalActions(state)
-        action = None
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
 
-        return action
+        # Vanilla Q-learning
+        actions = self.getLegalActions(state)
+        if not actions:
+            return None
+        if util.flipCoin(self.epsilon):
+            return random.choice(actions)
+        else:
+            return self.getPolicy(state)
 
     def update(self, state, action, nextState, reward):
         """
@@ -103,14 +147,27 @@ class QLearningAgent(ReinforcementAgent):
 
           NOTE: You should never call this function,
           it will be called on your behalf
+
+          Q(s,a) <- Q(s,a) + alpha(reward + gamma*Q(s',a') - Q(s,a))
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Vanilla Q-learning update algorithm
+        q_val_cur = self.getQValue(state, action)
+        q_val_nxt = self.getValue(nextState)
+        update = self.alpha * (reward + self.discount * q_val_nxt - q_val_cur)
+
+        # Apply update to the encoded state found by the autoencoder
+        if self.encoder:
+            state = self.enc_type.predict(self.encoder, state)
+
+        # update
+        self.q_values[(state, action)] += update
+
 
 class PacmanQAgent(QLearningAgent):
     "Exactly the same as QLearningAgent, but with different default parameters"
 
-    def __init__(self, epsilon=0.05,gamma=0.8,alpha=0.2, numTraining=0, **args):
+    def __init__(self, epsilon=0.05, gamma=0.8, alpha=0.2, numTraining=0, **args):
         """
         These default parameters can be changed from the pacman.py command line.
         For example, to change the exploration rate, try:
@@ -134,8 +191,8 @@ class PacmanQAgent(QLearningAgent):
         informs parent of action for Pacman.  Do not change or remove this
         method.
         """
-        action = QLearningAgent.getAction(self,state)
-        self.doAction(state,action)
+        action = QLearningAgent.getAction(self, state)
+        self.doAction(state, action)
         return action
 
 
@@ -147,27 +204,55 @@ class ApproximateQAgent(PacmanQAgent):
        and update.  All other QLearningAgent functions
        should work as is.
     """
+
     def __init__(self, extractor='IdentityExtractor', **args):
         self.featExtractor = util.lookup(extractor, globals())()
         PacmanQAgent.__init__(self, **args)
+        self.weights = util.Counter()
 
-        # You might want to initialize weights here.
-        "*** YOUR CODE HERE ***"
+        # Save states encountered when played by an intelligent agent.
+        # These states are used by Autoencoder+Vanilla Q-learning.
+        self.enable_sate_saving = False
+        self.uniq_state = {}
+        self.state_file = open('state_file_raw.dat', 'w')
 
     def getQValue(self, state, action):
         """
           Should return Q(state,action) = w * featureVector
           where * is the dotProduct operator
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Start saving the states ones training has been completed.
+        if self.enable_sate_saving:
+            s = str(state)
+            if s not in self.uniq_state:
+                s = s.split('Score')[0]
+                self.uniq_state[s] = 0
+                self.state_file.write(s + '\n')
+
+        # Approximate Q-learning
+        features = self.featExtractor.getFeatures(state, action)
+        w, f = [], []
+        for feature, value in features.items():
+            w.append(self.weights[feature])
+            f.append(value)
+        w = np.array(w)
+        f = np.array(f)
+        return np.dot(w, f)
 
     def update(self, state, action, nextState, reward):
         """
            Should update your weights based on transition
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Approximate Q-learning
+        q_val_cur = self.getQValue(state, action)
+        q_val_nxt = self.getValue(nextState)
+        correction = reward + self.discount * q_val_nxt - q_val_cur
+        update = self.alpha * correction
+        features = self.featExtractor.getFeatures(state, action)
+        for feature, value in features.items():
+            self.weights[feature] += update * value
 
     def final(self, state):
         "Called at the end of each game."
@@ -176,6 +261,7 @@ class ApproximateQAgent(PacmanQAgent):
 
         # did we finish training?
         if self.episodesSoFar == self.numTraining:
-            # you might want to print your weights here for debugging
-            "*** YOUR CODE HERE ***"
+            # Enable state saving
+            print("Save states enabled.")
+            self.enable_sate_saving = True
             pass

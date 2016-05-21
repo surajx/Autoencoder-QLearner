@@ -520,6 +520,16 @@ def readCommand( argv ):
     parser.add_option('--timeout', dest='timeout', type='int',
                       help=default('Maximum length of time an agent can spend computing in a single game'), default=30)
 
+    # Autoencoder parameters
+    parser.add_option('-e', '--encoder', dest='encoder', help=default('The state encoder'),
+                      metavar='module', default=None)
+    parser.add_option('-d', '--data', dest='dataset', help=default('Dataset for state encoder'),
+                      metavar='data_file', default=None)
+    parser.add_option('-u', '--hidden', dest='hidden', help=default('No of hidden neurons'),
+                      metavar='NEURON', type='string', default="30")
+    parser.add_option('-i', '--epoch', dest='epoch', help=default('No of epochs'),
+                      metavar='EPOCH', type='int', default=3000)
+
     options, otherjunk = parser.parse_args(argv)
     if len(otherjunk) != 0:
         raise Exception('Command line input not understood: ' + str(otherjunk))
@@ -536,6 +546,18 @@ def readCommand( argv ):
     noKeyboard = options.gameToReplay == None and (options.textGraphics or options.quietGraphics)
     pacmanType = loadAgent(options.pacman, noKeyboard)
     agentOpts = parseAgentArgs(options.agentArgs)
+
+    # if autoencoder is specified, set its parameters.
+    if options.encoder:
+        enc_type = __import__(options.encoder)
+        if options.dataset:
+            hidden = [int(n) for n in options.hidden.split(',')]
+            epoch = int(options.epoch)
+            print("Training Epochs:", epoch)
+            print("Hidden Layers:", hidden)
+            encoder = enc_type.train(train_data=options.dataset, epoch=epoch, hidden=hidden)
+            agentOpts['encoder'] = {'encoder':encoder, 'enc_type': enc_type}
+
     if options.numTraining > 0:
         args['numTraining'] = options.numTraining
         if 'numTraining' not in agentOpts: agentOpts['numTraining'] = options.numTraining
