@@ -12,6 +12,14 @@ how effective auto-encoders are in preprocessing the state space. The study woul
 features used, learning rate, and overall performance to measure effectiveness. Future extensions to this research would be to 
 have an on-line autoencoder to periodically update the state space by looking at states that have similar future expected rewards.
 
+### Additional modules required
+
+* `numpy : 1.11.0`
+* `keras : 1.0.3`
+* `theano: 0.8.2`
+
+Versions are mentioned for documentation purposes, `pip install numpy theano keras` should work just fine.
+
 ### How to run
 
 Navigate to `code` folder, then use the following command:
