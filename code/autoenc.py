@@ -170,34 +170,36 @@ def predict(encoder, state):
     return tuple(list(np.round(normalize(state_encoded)[0])))
 
 if __name__ == '__main__':
-    encoder, autoencoder = train(
-        train_data='state_file_mediumClassic_uniq.dat', epoch=3000, hidden=[10])
+    print("Disable sections to enable debugging.")
+    # encoder = train(
+    #     train_data='state_file_mediumGrid_uniq.dat', epoch=3000, hidden=[10])
 
-    # print(encoder.get_weights())
-    # for wt in encoder.get_weights():
-    #     for w in wt:
-    #         print("lskjf")
-    #         print(w)
+    # # print(encoder.get_weights())
+    # # for wt in encoder.get_weights():
+    # #     for w in wt:
+    # #         print("lskjf")
+    # #         print(w)
 
-    wt = encoder.get_weights()
-    # ip_w = wt[2]
-    # for layer in [wt[0].T, wt[2].T]
-    #     for w in layer:
-    #         w.reshape((7, 8))
+    # wt = encoder.get_weights()
+    # # ip_w = wt[2]
+    # for layer in [wt[0].T, wt[2].T]:
+    #     print(layer.shape)
+    # #     for w in layer:
+    # #         w.reshape((7, 8))
 
-    import matplotlib.pyplot as plt
-    # # use Matplotlib (don't ask)
-    cnt = 0
-    for layer in [wt[0].T, wt[2].T]:
-        plt.figure(figsize=(30, 4))
-        n = len(layer)
-        for i, w in enumerate(layer):
-            ax = plt.subplot(2, n, i + 1)
-            plt.imshow(w.reshape((7, 8)))
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
-        plt.savefig('filename_w_hidden_classic' + str(cnt) + '.svg')
-        cnt += 1
+    # import matplotlib.pyplot as plt
+    # # # use Matplotlib (don't ask)
+    # cnt = 0
+    # for layer in [wt[0].T, wt[2].T]:
+    #     plt.figure(figsize=(50, 4))
+    #     n = len(layer)
+    #     for i, w in enumerate(layer):
+    #         ax = plt.subplot(2, n, i + 1)
+    #         plt.imshow(w.reshape((5, 6)))
+    #         ax.get_xaxis().set_visible(False)
+    #         ax.get_yaxis().set_visible(False)
+    #     plt.savefig('fig_w_mediumGrid_no_walls' + str(cnt) + '.svg')
+    #     cnt += 1
 
     # fig = plt.figure(figsize=(20, 4))
     # wt = encoder.get_weights()
