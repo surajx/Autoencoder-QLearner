@@ -14,6 +14,8 @@ have an on-line autoencoder to periodically update the state space by looking at
 
 ### How to run
 
+Navigate to `code` folder, then use the following command:
+
 `python pacman.py -p PacmanQAgent -x 2000 -n 2010 -a epsilon=0.05,gamma=0.8,alpha=0.2 -l mediumGrid -e autoenc -d state_file_mediumGrid_uniq.dat -u 10 -i 3000`
 
 * `-u : number of hidden neurons`
