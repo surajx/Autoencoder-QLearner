@@ -103,7 +103,12 @@ def train(train_data='state_file_4_conv_uniq.dat', epoch=50, hidden=[50]):
                 rows = []
                 continue
             row = []
-            for c in list(l.rstrip('\n')):
+            l = l.rstrip('\n')
+            if l.count('%') == len(l):
+                continue
+            else:
+                l = l[1:-1]
+            for c in list(l):
                 row.append(encode(c))
             rows.append(row)
 
@@ -147,7 +152,12 @@ def predict(encoder, state):
         if l == '':
             continue
         row = []
-        for c in list(l.rstrip('\n')):
+        l = l.rstrip('\n')
+        if l.count('%') == len(l):
+            continue
+        else:
+            l = l[1:-1]
+        for c in list(l):
             row.append(encode(c))
         rows.append(row)
     dataset.append(rows)
