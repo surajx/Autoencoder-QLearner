@@ -12,6 +12,8 @@ how effective auto-encoders are in preprocessing the state space. The study woul
 features used, learning rate, and overall performance to measure effectiveness. Future extensions to this research would be to 
 have an on-line autoencoder to periodically update the state space by looking at states that have similar future expected rewards.
 
+Poster: [poster.pdf](https://gitlab.cecs.anu.edu.au/surajx/comp6320-research-project/raw/9df1fca60158abeea8ef2ac6a65c2c0747a78a63/poster.pdf)
+
 ### Additional modules required
 
 * `numpy : 1.11.0`
