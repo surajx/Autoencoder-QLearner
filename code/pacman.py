@@ -321,7 +321,7 @@ class PacmanRules:
     These functions govern how pacman interacts with his environment under
     the classic game rules.
     """
-    PACMAN_SPEED=1
+    PACMAN_SPEED=1-.0001
 
     def getLegalActions( state ):
         """

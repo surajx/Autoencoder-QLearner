@@ -69,16 +69,19 @@ class SimpleExtractor(FeatureExtractor):
 
         features["bias"] = 1.0
 
+        from pacman import PacmanRules
         # compute the location of pacman after he takes the action
         x, y = state.getPacmanPosition()
-        dx, dy = Actions.directionToVector(action)
+        dx, dy = Actions.directionToVector(action, PacmanRules.PACMAN_SPEED)
         next_x, next_y = int(x + dx), int(y + dy)
 
         # count the number of ghosts 1-step away
-        features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
+        features["#-of-ghosts-1-step-away"] = sum(((g_x - next_x)**2 + (g_y - next_y)**2) < 5 for g_x, g_y in ghosts)
+        # features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
 
         # if there is no danger of ghosts then add the food feature
-        if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
+        # if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
+        if not features["#-of-ghosts-1-step-away"] and closestFood((next_x, next_y), food, walls) < 25:
             features["eats-food"] = 1.0
 
         dist = closestFood((next_x, next_y), food, walls)
@@ -86,5 +89,5 @@ class SimpleExtractor(FeatureExtractor):
             # make the distance a number less than one otherwise the update
             # will diverge wildly
             features["closest-food"] = float(dist) / (walls.width * walls.height)
-        features.divideAll(10.0)
+        features.divideAll(10000.0)
         return features

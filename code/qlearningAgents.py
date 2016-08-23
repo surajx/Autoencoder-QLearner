@@ -196,6 +196,126 @@ class PacmanQAgent(QLearningAgent):
         return action
 
 
+class JarrydQAgent(QLearningAgent):
+
+    def __init__(self, epsilon=0.05, gamma=0.8, alpha=0.2, numTraining=0, **args):
+        """
+        These default parameters can be changed from the pacman.py command line.
+        For example, to change the exploration rate, try:
+            python pacman.py -p PacmanQLearningAgent -a epsilon=0.1
+
+        alpha    - learning rate
+        epsilon  - exploration rate
+        gamma    - discount factor
+        numTraining - number of training episodes, i.e. no learning after these many episodes
+        """
+        args['epsilon'] = epsilon
+        args['gamma'] = gamma
+        args['alpha'] = alpha
+        args['numTraining'] = numTraining
+        self.index = 0  # This is always Pacman
+        QLearningAgent.__init__(self, **args)
+
+        #Initialize an empty dict for storing emperical count
+        self.emperical_count = {}
+
+    def getQValue(self, state, action):
+        """
+          Returns Q(state,action)
+          Should return 0.0 if we never seen
+          a state or (state,action) tuple
+        """
+
+        """
+            We need to combine the state action pairs and then feed it to the autoencoder.
+            Might need to reproduce the training dataset so that the autoenc trains on the action also.
+
+            Then write a function:
+            def phi(s,a):
+                return self.enc_type.predict(self.encoder, vectorized state action pair)
+
+            vectorization should be the same way as it was done to train the autoencoder.
+
+            * then use numpy to take dot product of difference.
+            * code so that you can have swap distance mesuring strategy, ie we can use scales states as well.
+            * use the distance to create a similarity measure, which is a kernal.
+            * use the emperical count(already done) multiplied by the relevant similarity measure
+                and summed over all the visited states to get the pseudo count.
+            * calculate the exploration bonus.
+            *DONE!!!!
+        """
+
+        # Encoding the original state to map to the relevant features
+        # found by the autoencoder.
+        if self.encoder:
+            state = self.enc_type.predict(self.encoder, state)
+
+        # Vanilla Q-learning
+        if (state, action) not in self.q_values:
+            self.q_values[(state, action)] = 0
+
+        # if a state,action pair is visited increase its emperical count.
+        if (state, action) not in self.emperical_count:
+            self.emperical_count[(state, action)] = 1
+        else:
+            self.emperical_count[(state, action)] += 1
+
+        return self.q_values[(state, action)]
+
+    def getAction(self, state):
+        """
+        Simply calls the getAction method of QLearningAgent and then
+        informs parent of action for Pacman.  Do not change or remove this
+        method.
+        """
+
+        # no epsilon greedy, that is taken care of by the exploration bonus
+        actions = self.getLegalActions(state)
+        if not actions:
+            return None
+        action = self.getPolicy(state)
+        self.doAction(state, action)
+        return action
+
+    def update(self, state, action, nextState, reward):
+        """
+          The parent class calls this to observe a
+          state = action => nextState and reward transition.
+          You should do your Q-Value update here
+
+          NOTE: You should never call this function,
+          it will be called on your behalf
+
+          Q(s,a) <- Q(s,a) + alpha(reward + gamma*Q(s',a') - Q(s,a))
+        """
+
+        # Vanilla Q-learning update algorithm
+        q_val_cur = self.getQValue(state, action)
+        q_val_nxt = self.getValue(nextState)
+
+        exploration_bonus = explorer(state, action, gen_param=1)
+
+        update = self.alpha * (reward + exploration_bonus + self.discount * q_val_nxt - q_val_cur)
+
+        # Apply update to the encoded state found by the autoencoder
+        if self.encoder:
+            state = self.enc_type.predict(self.encoder, state)
+
+        # update
+        self.q_values[(state, action)] += update
+
+    def explorer(self, sa_tuple_cur, sa_tuple_nxt):
+        # Compute distance measure
+        # Compute similarity measure
+        # Compute pseudo count
+        pass
+
+
+    def dist_between_feature(self, ):
+        pass
+
+
+
 class ApproximateQAgent(PacmanQAgent):
     """
        ApproximateQLearningAgent
