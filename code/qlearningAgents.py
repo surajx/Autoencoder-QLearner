@@ -212,9 +212,9 @@ class ApproximateQAgent(PacmanQAgent):
 
         # Save states encountered when played by an intelligent agent.
         # These states are used by Autoencoder+Vanilla Q-learning.
-        self.enable_sate_saving = False
-        self.uniq_state = {}
-        self.state_file = open('state_file_raw.dat', 'w')
+        # self.enable_sate_saving = False
+        # self.uniq_state = {}
+        # self.state_file = open('state_file_raw.dat', 'w')
 
     def getQValue(self, state, action):
         """
@@ -223,12 +223,12 @@ class ApproximateQAgent(PacmanQAgent):
         """
 
         # Start saving the states ones training has been completed.
-        if self.enable_sate_saving:
-            s = str(state)
-            if s not in self.uniq_state:
-                s = s.split('Score')[0]
-                self.uniq_state[s] = 0
-                self.state_file.write(s + '\n')
+        # if self.enable_sate_saving:
+        #     s = str(state)
+        #     if s not in self.uniq_state:
+        #         s = s.split('Score')[0]
+        #         self.uniq_state[s] = 0
+        #         self.state_file.write(s + '\n')
 
         # Approximate Q-learning
         features = self.featExtractor.getFeatures(state, action)
@@ -262,6 +262,6 @@ class ApproximateQAgent(PacmanQAgent):
         # did we finish training?
         if self.episodesSoFar == self.numTraining:
             # Enable state saving
-            print("Save states enabled.")
-            self.enable_sate_saving = True
+            # print("Save states enabled.")
+            # self.enable_sate_saving = False
             pass
