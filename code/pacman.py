@@ -321,7 +321,7 @@ class PacmanRules:
     These functions govern how pacman interacts with his environment under
     the classic game rules.
     """
-    PACMAN_SPEED=1-.0001
+    PACMAN_SPEED=1#-.0001
 
     def getLegalActions( state ):
         """
@@ -529,6 +529,8 @@ def readCommand( argv ):
                       metavar='NEURON', type='string', default="30")
     parser.add_option('-i', '--epoch', dest='epoch', help=default('No of epochs'),
                       metavar='EPOCH', type='int', default=3000)
+    parser.add_option('-w', '--weights', dest='weights', help=default('Trained autoencoder'),
+                  metavar='WEIGHT', type='string', default=None)
 
     options, otherjunk = parser.parse_args(argv)
     if len(otherjunk) != 0:
@@ -556,6 +558,9 @@ def readCommand( argv ):
             print("Training Epochs:", epoch)
             print("Hidden Layers:", hidden)
             encoder = enc_type.train(train_data=options.dataset, epoch=epoch, hidden=hidden)
+            agentOpts['encoder'] = {'encoder':encoder, 'enc_type': enc_type}
+        elif options.weights:
+            encoder = enc_type.load_enc(weight_file=options.weights)
             agentOpts['encoder'] = {'encoder':encoder, 'enc_type': enc_type}
 
     if options.numTraining > 0:

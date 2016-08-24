@@ -18,6 +18,7 @@ from game import *
 from learningAgents import ReinforcementAgent
 from featureExtractors import *
 
+from time import clock
 import random
 import util
 
@@ -216,51 +217,127 @@ class JarrydQAgent(QLearningAgent):
         self.index = 0  # This is always Pacman
         QLearningAgent.__init__(self, **args)
 
-        #Initialize an empty dict for storing emperical count
-        self.emperical_count = {}
+        self.theta = util.Counter()
+        self.visited_states = {}
 
-    def getQValue(self, state, action):
-        """
-          Returns Q(state,action)
-          Should return 0.0 if we never seen
-          a state or (state,action) tuple
-        """
-
-        """
-            We need to combine the state action pairs and then feed it to the autoencoder.
-            Might need to reproduce the training dataset so that the autoenc trains on the action also.
-
-            Then write a function:
-            def phi(s,a):
-                return self.enc_type.predict(self.encoder, vectorized state action pair)
-
-            vectorization should be the same way as it was done to train the autoencoder.
-
-            * then use numpy to take dot product of difference.
-            * code so that you can have swap distance mesuring strategy, ie we can use scales states as well.
-            * use the distance to create a similarity measure, which is a kernal.
-            * use the emperical count(already done) multiplied by the relevant similarity measure
-                and summed over all the visited states to get the pseudo count.
-            * calculate the exploration bonus.
-            *DONE!!!!
-        """
-
+    def phi(self, state, action):
         # Encoding the original state to map to the relevant features
         # found by the autoencoder.
-        if self.encoder:
-            state = self.enc_type.predict(self.encoder, state)
+        if (state, action) in self.visited_states and 'phi' in self.visited_states[(state, action)]:
+            return self.visited_states[(state, action)]['phi']
+        else:
+            phi_sa = self.enc_type.predict(self.encoder, state, action)
+            if (state, action) in self.visited_states:
+                self.visited_states[(state, action)]['phi'] = phi_sa
+            else:
+                self.visited_states[(state, action)] = {'phi': phi_sa}
+            return phi_sa
+
+    def Q(self, state, action):
+
+        phi_sa = list(self.phi(state, action))
+        theta = []
+        for idx, f in enumerate(phi_sa):
+            theta.append(self.theta[idx])
+        theta = np.array(theta)
+        return np.dot(theta, phi_sa)
+
+    def maxQ(self, state):
+        """
+          Returns max_action Q(state,action)
+          where the max is over legal actions.  Note that if
+          there are no legal actions, which is the case at the
+          terminal state, you should return a value of 0.0.
+        """
 
         # Vanilla Q-learning
-        if (state, action) not in self.q_values:
-            self.q_values[(state, action)] = 0
+        actions = self.getLegalActions(state)
+        if not actions:
+            return 0
+        max_val = float("-inf")
+        for action in actions:
+            q_val = self.Q(state, action)
+            if self.Q(state, action) > max_val:
+                max_val = q_val
+        return max_val
 
+    def update(self, state, action, nextState, reward):
+        """
+           Should update your weights based on transition
+        """
+
+        #Update the emperical_count
         # if a state,action pair is visited increase its emperical count.
-        if (state, action) not in self.emperical_count:
-            self.emperical_count[(state, action)] = 1
+        if (state, action) in self.visited_states and 'emperical_count' in self.visited_states[(state, action)]:
+            self.visited_states[(state, action)]['emperical_count'] += 1
         else:
-            self.emperical_count[(state, action)] += 1
+            if (state, action) in self.visited_states:
+                self.visited_states[(state, action)]['emperical_count'] = 1
+            else:
+                self.visited_states[(state, action)] = {'emperical_count': 1}
 
-        return self.q_values[(state, action)]
+        # Approximate Q-learning
+        q_val_cur = self.Q(state, action)
+        q_val_nxt = self.maxQ(nextState)
+        td_err = reward + self.discount * q_val_nxt - q_val_cur
+        update = self.alpha * td_err
+        phi_sa = list(self.phi(state, action))
+        for idx, f in enumerate(phi_sa):
+            self.theta[idx] += update * f
+
+    def d_phi_saCur_saVistied(self, sa_cur, sa_visited):
+        start_time = clock()
+        euclidean_dist = np.array(self.phi(sa_cur[0], sa_cur[1])) - np.array(self.phi(sa_visited[0], sa_visited[1]))
+        elapsed = clock() - start_time
+        print("Euclidean Dist calculation:", elapsed)
+        start_time = clock()
+        dist = np.dot(euclidean_dist, euclidean_dist)
+        elapsed = clock() - start_time
+        print("Dot Product:", elapsed)
+        return dist
+
+    def similarity_measure(self, sa_cur, sa_visited, gen_param=1):
+        distance = self.d_phi_saCur_saVistied(sa_cur, sa_visited)
+        return np.exp(-distance/(gen_param**2))
+
+    def pseudo_count(self, state, action):
+        sa_cur = (state, action)
+        pseudo_count = 0
+        for sa_visited, emperical_count in self.emperical_count.items():
+            pseudo_count += self.similarity_measure(sa_cur, sa_visited) * emperical_count
+        return pseudo_count
+
+    def explore_bonus(self, state, action, bonus_scaling_factor=0.05):
+        start_time = clock()
+        exp_bonus = bonus_scaling_factor/(np.sqrt(self.pseudo_count(state, action)) + 0.01)
+        elapsed = clock() - start_time
+        print("Time to calculate explore_bonus", elapsed)
+        return exp_bonus
+
+    def __value_for_action(self, state, action):
+        return self.Q(state, action) + self.explore_bonus(state, action)
+
+    def getPolicy(self, state):
+        """
+          Compute the best action to take in a state.  Note that if there
+          are no legal actions, which is the case at the terminal state,
+          you should return None.
+        """
+
+        actions = self.getLegalActions(state)
+        if not actions:
+            return None
+        max_actions = []
+        for action in actions:
+            val_4_action = self.__value_for_action(state, action)
+            if not max_actions:
+                max_actions.append((action, val_4_action))
+                continue
+            if val_4_action > max_actions[0][1]:
+                max_actions = [(action, val_4_action)]
+            elif val_4_action == max_actions[0][1]:
+                max_actions.append((action, val_4_action))
+        return random.choice(max_actions)[0]
 
     def getAction(self, state):
         """
@@ -269,51 +346,9 @@ class JarrydQAgent(QLearningAgent):
         method.
         """
 
-        # no epsilon greedy, that is taken care of by the exploration bonus
-        actions = self.getLegalActions(state)
-        if not actions:
-            return None
         action = self.getPolicy(state)
         self.doAction(state, action)
         return action
-
-    def update(self, state, action, nextState, reward):
-        """
-          The parent class calls this to observe a
-          state = action => nextState and reward transition.
-          You should do your Q-Value update here
-
-          NOTE: You should never call this function,
-          it will be called on your behalf
-
-          Q(s,a) <- Q(s,a) + alpha(reward + gamma*Q(s',a') - Q(s,a))
-        """
-
-        # Vanilla Q-learning update algorithm
-        q_val_cur = self.getQValue(state, action)
-        q_val_nxt = self.getValue(nextState)
-
-        exploration_bonus = explorer(state, action, gen_param=1)
-
-        update = self.alpha * (reward + exploration_bonus + self.discount * q_val_nxt - q_val_cur)
-
-        # Apply update to the encoded state found by the autoencoder
-        if self.encoder:
-            state = self.enc_type.predict(self.encoder, state)
-
-        # update
-        self.q_values[(state, action)] += update
-
-    def explorer(self, sa_tuple_cur, sa_tuple_nxt):
-        # Compute distance measure
-        # Compute similarity measure
-        # Compute pseudo count
-        pass
-
-
-    def dist_between_feature(self, ):
-        pass
-
 
 
 class ApproximateQAgent(PacmanQAgent):
@@ -332,23 +367,33 @@ class ApproximateQAgent(PacmanQAgent):
 
         # Save states encountered when played by an intelligent agent.
         # These states are used by Autoencoder+Vanilla Q-learning.
-        # self.enable_sate_saving = False
-        # self.uniq_state = {}
-        # self.state_file = open('state_file_raw.dat', 'w')
+        self.enable_sate_saving = False
+        self.uniq_state = {}
+        self.state_file = open('state_file_raw.dat', 'w')
+
+    def getAction(self, state):
+        """
+        Simply calls the getAction method of QLearningAgent and then
+        informs parent of action for Pacman.  Do not change or remove this
+        method.
+        """
+        action = QLearningAgent.getAction(self, state)
+
+        # Start saving the states ones training has been completed.
+        if self.enable_sate_saving:
+            s = str(state).split('Score')[0]
+            if s not in self.uniq_state:
+                self.uniq_state[s] = 0
+                self.state_file.write(s + action + '\n')
+
+        self.doAction(state, action)
+        return action
 
     def getQValue(self, state, action):
         """
           Should return Q(state,action) = w * featureVector
           where * is the dotProduct operator
         """
-
-        # Start saving the states ones training has been completed.
-        # if self.enable_sate_saving:
-        #     s = str(state)
-        #     if s not in self.uniq_state:
-        #         s = s.split('Score')[0]
-        #         self.uniq_state[s] = 0
-        #         self.state_file.write(s + '\n')
 
         # Approximate Q-learning
         features = self.featExtractor.getFeatures(state, action)
@@ -382,6 +427,6 @@ class ApproximateQAgent(PacmanQAgent):
         # did we finish training?
         if self.episodesSoFar == self.numTraining:
             # Enable state saving
-            # print("Save states enabled.")
-            # self.enable_sate_saving = False
+            print("Save states enabled.")
+            self.enable_sate_saving = True
             pass

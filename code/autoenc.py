@@ -1,7 +1,9 @@
 from keras.layers import Input, Dense
 from keras.models import Model
 from keras.regularizers import l2
+from keras.models import load_model
 import numpy as np
+from game import Directions
 
 
 def get_autoenc(X, hidden, optimizer='adadelta', loss='binary_crossentropy'):
@@ -64,23 +66,42 @@ def encode(c):
     elif c == ' ':
         return 100
     elif c == '.':
-        return 250
+        return 150
     elif c == 'G':
-        return 300
+        return 200
     elif c == 'o':
+        return 250
+    elif c == '>':
+        return 300
+    elif c == '<':
         return 350
-    elif c in ['>', '<', 'v', '^']:
+    elif c == 'v':
         return 400
+    elif c == '^':
+        return 450
+    elif c == Directions.NORTH:
+        return 500
+    elif c == Directions.SOUTH:
+        return 550
+    elif c == Directions.EAST:
+        return 600
+    elif c == Directions.WEST:
+        return 650
+    elif c == Directions.STOP:
+        return 700
 
 
-def normalize(encoded_imgs, a=50, b=400):
+def normalize(encoded_imgs, a=50, b=700):
     """ Normalize the input array between two values. The boundaries default
-        to (50, 400), the upper and lower bounds of the encoding scheme.
+        to (50, 700), the upper and lower bounds of the encoding scheme.
 
         (numpy.array, <num>, <num>) -> (numpy.array)
     """
     return a + (((encoded_imgs - encoded_imgs.min())
                  * (b - a)) / (encoded_imgs.max() - encoded_imgs.min()))
+
+def load_enc(weight_file='trained_autoenc.h5f'):
+    return load_model(weight_file)
 
 
 def train(train_data='state_file_4_conv_uniq.dat', epoch=50, hidden=[50]):
@@ -98,7 +119,10 @@ def train(train_data='state_file_4_conv_uniq.dat', epoch=50, hidden=[50]):
     with open(train_data, 'r') as orig:
         rows = []
         for l in orig:
-            if l == '\n':
+            if l.rstrip('\n')=='':
+                continue
+            if l.count('%')==0:
+                rows.append([encode(l.rstrip('\n'))]*len(rows[-1]))
                 dataset.append(rows)
                 rows = []
                 continue
@@ -134,10 +158,12 @@ def train(train_data='state_file_4_conv_uniq.dat', epoch=50, hidden=[50]):
                     shuffle=True,
                     validation_data=(x_test_norm, x_test_norm))
 
+    encoder.save('./trained_autoenc.h5f', overwrite=True)
+
     return encoder
 
 
-def predict(encoder, state):
+def predict(encoder, state, action):
     """ Using the provided encoder return the compressed state for the given state.
 
         (keras.Model, GameState) -> (tuple)
@@ -160,6 +186,7 @@ def predict(encoder, state):
         for c in list(l):
             row.append(encode(c))
         rows.append(row)
+    rows.append([encode(action)]*len(rows[-1]))
     dataset.append(rows)
 
     # Using the encoder part of the trained autoencoder, predict

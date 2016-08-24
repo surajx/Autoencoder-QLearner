@@ -11,6 +11,8 @@
 "Feature extractors for Pacman game states"
 
 from game import Directions, Actions
+from pacman import GhostRules
+from pacman import PacmanRules
 import util
 
 class FeatureExtractor:
@@ -50,6 +52,28 @@ def closestFood(pos, food, walls):
     # no food found
     return None
 
+def closestCapsule(pos, capsule, walls):
+    """
+    closestFood -- this is similar to the function that we have
+    worked on in the search project; here its all in one place
+    """
+    fringe = [(pos[0], pos[1], 0)]
+    expanded = set()
+    while fringe:
+        pos_x, pos_y, dist = fringe.pop(0)
+        if (pos_x, pos_y) in expanded:
+            continue
+        expanded.add((pos_x, pos_y))
+        # if we find a food at this location then exit
+        if (pos_x,pos_y) in capsule:
+            return dist
+        # otherwise spread out from the location to its neighbours
+        nbrs = Actions.getLegalNeighbors((pos_x, pos_y), walls)
+        for nbr_x, nbr_y in nbrs:
+            fringe.append((nbr_x, nbr_y, dist+1))
+    # no food found
+    return None
+
 class SimpleExtractor(FeatureExtractor):
     """
     Returns simple features for a basic reflex Pacman:
@@ -64,30 +88,48 @@ class SimpleExtractor(FeatureExtractor):
         food = state.getFood()
         walls = state.getWalls()
         ghosts = state.getGhostPositions()
+        capsule = state.getCapsules()
 
         features = util.Counter()
 
         features["bias"] = 1.0
 
-        from pacman import PacmanRules
         # compute the location of pacman after he takes the action
         x, y = state.getPacmanPosition()
         dx, dy = Actions.directionToVector(action, PacmanRules.PACMAN_SPEED)
         next_x, next_y = int(x + dx), int(y + dy)
 
-        # count the number of ghosts 1-step away
-        features["#-of-ghosts-1-step-away"] = sum(((g_x - next_x)**2 + (g_y - next_y)**2) < 5 for g_x, g_y in ghosts)
-        # features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
+        # # count the number of ghosts 1-step away, chase, if you can kill
+        # is_all_scared = True
+        # for idx, agentState in enumerate(state.data.agentStates):
+        #     if idx==0: continue
+        #     if agentState.scaredTimer <= 0:
+        #         is_all_scared = False
+        #         break
+        # if is_all_scared:
+        #     dist = closestCapsule((next_x, next_y), ghosts, walls)
+        #     if dist is not None:
+        #         features["chase-ghosts"] = float(dist) / (walls.width * walls.height)
+        # #     features["#-of-ghosts-1-step-away"] = 0
+        # # else:
+        # #     features["chase-ghosts"] = 0
+        features["#-of-ghosts-1-step-away"] = sum((next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
 
         # if there is no danger of ghosts then add the food feature
-        # if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
-        if not features["#-of-ghosts-1-step-away"] and closestFood((next_x, next_y), food, walls) < 25:
+        if not features["#-of-ghosts-1-step-away"] and food[next_x][next_y]:
             features["eats-food"] = 1.0
 
         dist = closestFood((next_x, next_y), food, walls)
         if dist is not None:
             # make the distance a number less than one otherwise the update
             # will diverge wildly
-            features["closest-food"] = float(dist) / (walls.width * walls.height)
-        features.divideAll(10000.0)
+            features["closest-food"] = float(dist) / (walls.width * walls.height*2)
+
+        dist = closestCapsule((next_x, next_y), capsule, walls)
+        if dist is not None:
+            # make the distance a number less than one otherwise the update
+            # will diverge wildly
+            features["closest-capsule"] = float(dist) / (walls.width * walls.height)
+
+        features.divideAll(10.0)
         return features
