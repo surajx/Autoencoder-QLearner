@@ -214,6 +214,7 @@ class JarrydQAgent(QLearningAgent):
         args['gamma'] = gamma
         args['alpha'] = alpha
         args['numTraining'] = numTraining
+        self.start_of_episode = True
         self.index = 0  # This is always Pacman
         QLearningAgent.__init__(self, **args)
 
@@ -223,11 +224,12 @@ class JarrydQAgent(QLearningAgent):
     def phi(self, state, action):
         # Encoding the original state to map to the relevant features
         # found by the autoencoder.
-        if (state, action) in self.visited_states and 'phi' in self.visited_states[(state, action)]:
+        is_in_visited = (state, action) in self.visited_states
+        if is_in_visited and 'phi' in self.visited_states[(state, action)]:
             return self.visited_states[(state, action)]['phi']
         else:
             phi_sa = self.enc_type.predict(self.encoder, state, action)
-            if (state, action) in self.visited_states:
+            if is_in_visited:
                 self.visited_states[(state, action)]['phi'] = phi_sa
             else:
                 self.visited_states[(state, action)] = {'phi': phi_sa}
@@ -257,7 +259,7 @@ class JarrydQAgent(QLearningAgent):
         max_val = float("-inf")
         for action in actions:
             q_val = self.Q(state, action)
-            if self.Q(state, action) > max_val:
+            if q_val > max_val:
                 max_val = q_val
         return max_val
 
@@ -266,17 +268,12 @@ class JarrydQAgent(QLearningAgent):
            Should update your weights based on transition
         """
 
-        #Update the emperical_count
-        # if a state,action pair is visited increase its emperical count.
-        if (state, action) in self.visited_states and 'emperical_count' in self.visited_states[(state, action)]:
-            self.visited_states[(state, action)]['emperical_count'] += 1
-        else:
-            if (state, action) in self.visited_states:
-                self.visited_states[(state, action)]['emperical_count'] = 1
-            else:
-                self.visited_states[(state, action)] = {'emperical_count': 1}
+        #anneal alpha
+        sa_alpha = self.alpha/self.visited_states[(state,action)]['pseudo_count']
 
-        # Approximate Q-learning
+        self.visited_states[(state, action)]['alpha'] = sa_alpha
+
+        # start_time = clock()
         q_val_cur = self.Q(state, action)
         q_val_nxt = self.maxQ(nextState)
         td_err = reward + self.discount * q_val_nxt - q_val_cur
@@ -284,16 +281,18 @@ class JarrydQAgent(QLearningAgent):
         phi_sa = list(self.phi(state, action))
         for idx, f in enumerate(phi_sa):
             self.theta[idx] += update * f
+        # elapsed = clock() - start_time
+        # print("Time to calculate update:", elapsed)
 
     def d_phi_saCur_saVistied(self, sa_cur, sa_visited):
-        start_time = clock()
+        # start_time = clock()
         euclidean_dist = np.array(self.phi(sa_cur[0], sa_cur[1])) - np.array(self.phi(sa_visited[0], sa_visited[1]))
-        elapsed = clock() - start_time
-        print("Euclidean Dist calculation:", elapsed)
-        start_time = clock()
+        # elapsed = clock() - start_time
+        # print("Euclidean Dist calculation:", elapsed)
+        # start_time = clock()
         dist = np.dot(euclidean_dist, euclidean_dist)
-        elapsed = clock() - start_time
-        print("Dot Product:", elapsed)
+        # elapsed = clock() - start_time
+        # print("Dot Product:", elapsed)
         return dist
 
     def similarity_measure(self, sa_cur, sa_visited, gen_param=1):
@@ -303,15 +302,30 @@ class JarrydQAgent(QLearningAgent):
     def pseudo_count(self, state, action):
         sa_cur = (state, action)
         pseudo_count = 0
-        for sa_visited, emperical_count in self.emperical_count.items():
-            pseudo_count += self.similarity_measure(sa_cur, sa_visited) * emperical_count
+        # start_time = clock()
+        for sa_visited, sa_obj in self.visited_states.items():
+            if 'emperical_count' not in sa_obj:
+                continue
+            pseudo_count += self.similarity_measure(sa_cur, sa_visited) * sa_obj['emperical_count']
+        # elapsed = clock() - start_time
+        # print("Pseudo count calculation:", elapsed, len(self.visited_states))
+
+        # if a state,action pair is visited increase its emperical count.
+        if (state, action) in self.visited_states:
+            self.visited_states[(state, action)]['pseudo_count'] = pseudo_count
+        else:
+            self.visited_states[(state, action)] = {'pseudo_count': pseudo_count}
+
         return pseudo_count
 
     def explore_bonus(self, state, action, bonus_scaling_factor=0.05):
-        start_time = clock()
+        if self.start_of_episode:
+            start_time = clock()
         exp_bonus = bonus_scaling_factor/(np.sqrt(self.pseudo_count(state, action)) + 0.01)
-        elapsed = clock() - start_time
-        print("Time to calculate explore_bonus", elapsed)
+        if self.start_of_episode:
+            elapsed = clock() - start_time
+            print("Time to calculate explore_bonus:", elapsed)
+            self.start_of_episode = False
         return exp_bonus
 
     def __value_for_action(self, state, action):
@@ -345,10 +359,39 @@ class JarrydQAgent(QLearningAgent):
         informs parent of action for Pacman.  Do not change or remove this
         method.
         """
-
+        # start_time = clock()
         action = self.getPolicy(state)
+        # elapsed = clock() - start_time
+        # print("Time to calculate policy:", elapsed)
         self.doAction(state, action)
+
+        #Update the emperical_count
+        # if a state,action pair is visited increase its emperical count.
+        is_in_visited = (state, action) in self.visited_states
+        if is_in_visited and 'emperical_count' in self.visited_states[(state, action)]:
+            self.visited_states[(state, action)]['emperical_count'] += 1
+        else:
+            if is_in_visited:
+                self.visited_states[(state, action)]['emperical_count'] = 1
+            else:
+                self.visited_states[(state, action)] = {'emperical_count': 1}
+
+        # Since the action has been taken increment the pseudo-count by 1
+        if is_in_visited and 'pseudo_count' in self.visited_states[(state, action)]:
+            self.visited_states[(state, action)]['pseudo_count'] += 1
+
         return action
+
+    def final(self, state):
+        "Called at the end of each game."
+        # call the super-class final method
+        PacmanQAgent.final(self, state)
+        self.start_of_episode = True
+        if self.episodesSoFar%100==0:
+                print('\n\n\n\nVisited State Object Dump\n', self.visited_states, '\n\n\n\n')
+        print('Visited States Size:', len(self.visited_states))
+
+        print('Score:', state.getScore())
 
 
 class ApproximateQAgent(PacmanQAgent):
